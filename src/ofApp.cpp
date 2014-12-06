@@ -5,57 +5,9 @@ void ofApp::setup() {
     ofSetVerticalSync(true);
     
     //Setup for tracker
-	cam.initGrabber(640, 480);
-	tracker.setup();
-    
-    // load in sounds:
-    TOEIC.loadSound("sounds/TOEIC_sample.mp3");
-    
-    // the fft needs to be smoothed out, so we create an array of floats
-    // for that purpose:
-    fftSmoothed = new float[8192];
-    for (int i = 0; i < 8192; i++){
-        fftSmoothed[i] = 0;
-    }
-    /*
-    //Setup for audio part
-    ofSetCircleResolution(80);
-    ofBackground(54, 54, 54);
-    
-    soundStream.listDevices();
-    
-    //if you want to set a different device id
-    //soundStream.setDeviceID(0); //bear in mind the device id corresponds to all audio devices, including  input-only and output-only devices.
-    
-    int bufferSize = 256;
-    
-    
-    left.assign(bufferSize, 0.0);
-    right.assign(bufferSize, 0.0);
-    volHistory.assign(400, 0.0);
-    
-    bufferCounter	= 0;
-    drawCounter		= 0;
-    smoothedVol     = 0.0;
-    scaledVol		= 0.0;
-    
-    //Setup SoundStream:
-    //ofSoundStreamSetup(int nOutputs, int nInputs, int sampleRate, int bufferSize, int nBuffers)
-    
-    //nOutput Is the number of output channels that your computer supports. Usually this will be two: left and right.
-    //nInputs - Is the number of input channels that your system uses. sampleRate - Is usually 44,100 kHz, or CD quality, though you may want to make it higher or lower depending on the needs of your application.
-    //bufferSize - Is the size of the buffer that your system supports. At the time of writing this book, on any operating system, its probably 256 values.
-    //nBuffers - Is the number of buffers that your system will create and swap out. The more buffers, the faster your computer will write information into the buffer, but the more memory it will take up. You should probably use two for each channel that youre using.
-    
-    
-    // 0 output channels,
-    // 2 input channels
-    // 44100 samples per second
-    // 256 samples per buffer
-    // 4 num buffers (latency)
-    soundStream.setup(this, 0, 2, 44100, bufferSize, 4);
-    */
-
+    trackerSetUp();
+    audioSetUp();
+    textProcessingSetUp();
 }
 
 void ofApp::update() {
@@ -80,10 +32,11 @@ void ofApp::draw() {
 	ofSetColor(255);
 
 	cam.draw(0, 0);
+    //ofSetColor(255,0,0);
     tracker.draw();
 	ofDrawBitmapString(ofToString((int) ofGetFrameRate()), 10, 20);
-    //float mouthHeight = tracker.getGesture(tracker.MOUTH_HEIGHT);
-    if (mouthHeight >= 1.4) {//mouse is open
+    
+    if (mouthHeight >= 1.4) {//mouth is open
         mouthIsOpen = 1;
         if (!TOEIC.getIsPlaying()){
             TOEIC.play();
@@ -104,6 +57,18 @@ void ofApp::draw() {
     shwoFacialInfo();
     
     
+    // this is our timer for grabbing the next letter
+    textDrawingInfoUpdate();
+    textDraw();
+    float time = ofGetElapsedTimeMillis() - nextLetterTime;
+    if (time > 9)
+    {
+        textUpdateStrPosBasedOnTime(time);
+    }
+    
+    
+    
+    
     /*
     // draw the fft resutls:
     ofSetColor(255,255,255,255);
@@ -121,6 +86,13 @@ void ofApp::draw() {
     
 }
 
+void ofApp::trackerSetUp()
+{
+    cam.initGrabber(640, 480);
+    tracker.setup();
+}
+
+
 void ofApp::shwoFacialInfo()
 {
     ofSetColor(80,80,80);
@@ -137,6 +109,143 @@ void ofApp::shwoFacialInfo()
     ofDrawBitmapString(ofToString(jawOpenness),850,430);
 }
 
+void ofApp::textProcessingSetUp()
+{
+    nextLetterTime = ofGetElapsedTimeMillis();
+    lineCount      = 0;
+    letterCount    = 0;
+    // this is our buffer to stroe the text data
+    ofBuffer buffer = ofBufferFromFile("Text/TOEIC.txt");
+    
+    if(buffer.size()) {
+        
+        // we now keep grabbing the next line
+        // until we reach the end of the file
+        while(buffer.isLastLine() == false) {
+            
+            // move on to the next line
+            string line = buffer.getNextLine();
+            
+            // copy the line to draw later
+            // make sure its not a empty line
+            if(line.empty() == false) {
+                seussLines.push_back(line);
+            }
+            
+            // print out the line
+            cout << line << endl;
+            
+        }
+        
+    }
+    
+    strWidth = (seussLines[lineCount].length()*8) + 5;
+    
+
+
+}
+
+void ofApp::textDrawingInfoUpdate()
+{
+    typedLine = seussLines[lineCount].substr(0, letterCount);
+    strWidth = (seussLines[lineCount].length()*8) + 5;
+    
+    // x and y for the drawing the substring.
+    textDrawX = (ofGetWidth()-strWidth)/2;
+    //textDrawY = ofGetHeight()/2;
+    textDrawY = 640;
+}
+
+void ofApp::textUpdateStrPosBasedOnTime(int time)
+{
+    // increment the letter count
+    // to grab the letter to draw until
+    // we reach the end of the line
+    if(letterCount < (int)seussLines[lineCount].size()) {
+        
+        // move on to the next letter to increase the length for drawing
+        letterCount ++;
+        
+        // store time for next letter type
+        nextLetterTime = ofGetElapsedTimeMillis();
+        
+    }
+    else {//This entire line has finished
+        // wait just a flash of 0.3s then move on
+        // to the next line
+        if(time > 300) {
+            
+            nextLetterTime = ofGetElapsedTimeMillis();
+            letterCount = 0;
+            lineCount ++;
+            lineCount %= seussLines.size();//Print the passage infiniately
+        }
+        
+    }
+}
+
+void ofApp::textDraw()
+{
+    // draw the line
+    ofSetColor(0);
+    ofRect(textDrawX, textDrawY, strWidth, 15);//the black background rectangle
+    ofSetColor(255);
+    ofDrawBitmapString(typedLine, textDrawX+4, textDrawY+11);//the texts
+}
+
+
+
+void ofApp::audioSetUp()
+{
+    // load in sounds:
+    TOEIC.loadSound("sounds/TOEIC_sample.mp3");
+    
+    // the fft needs to be smoothed out, so we create an array of floats
+    // for that purpose:
+    fftSmoothed = new float[8192];
+    for (int i = 0; i < 8192; i++){
+        fftSmoothed[i] = 0;
+    }
+    /*
+     //Setup for audio part
+     ofSetCircleResolution(80);
+     ofBackground(54, 54, 54);
+     
+     soundStream.listDevices();
+     
+     //if you want to set a different device id
+     //soundStream.setDeviceID(0); //bear in mind the device id corresponds to all audio devices, including  input-only and output-only devices.
+     
+     int bufferSize = 256;
+     
+     
+     left.assign(bufferSize, 0.0);
+     right.assign(bufferSize, 0.0);
+     volHistory.assign(400, 0.0);
+     
+     bufferCounter	= 0;
+     drawCounter		= 0;
+     smoothedVol     = 0.0;
+     scaledVol		= 0.0;
+     
+     //Setup SoundStream:
+     //ofSoundStreamSetup(int nOutputs, int nInputs, int sampleRate, int bufferSize, int nBuffers)
+     
+     //nOutput Is the number of output channels that your computer supports. Usually this will be two: left and right.
+     //nInputs - Is the number of input channels that your system uses. sampleRate - Is usually 44,100 kHz, or CD quality, though you may want to make it higher or lower depending on the needs of your application.
+     //bufferSize - Is the size of the buffer that your system supports. At the time of writing this book, on any operating system, its probably 256 values.
+     //nBuffers - Is the number of buffers that your system will create and swap out. The more buffers, the faster your computer will write information into the buffer, but the more memory it will take up. You should probably use two for each channel that youre using.
+     
+     
+     // 0 output channels,
+     // 2 input channels
+     // 44100 samples per second
+     // 256 samples per buffer
+     // 4 num buffers (latency)
+     soundStream.setup(this, 0, 2, 44100, bufferSize, 4);
+     */
+    
+}
 void ofApp::audioDrawChannels()
 {
     ofSetColor(225);
@@ -255,6 +364,7 @@ void ofApp::audioIn(float * input, int bufferSize, int nChannels)
     bufferCounter++;
     
 }
+
 
 
 void ofApp::keyPressed(int key) {
